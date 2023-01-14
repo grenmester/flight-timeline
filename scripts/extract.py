@@ -1,11 +1,13 @@
 """Extract flight information into JSON."""
 
+import datetime as dt
 import glob
 import json
 import os
 
 import click
 
+TZ_FILE = "scripts/data/tz.json"
 OUTPUT_DIR = "src/data"
 OUTPUT_FILE = "flights.json"
 
@@ -18,16 +20,46 @@ def get_source_files(root_dir):
     return sorted(glob.iglob(f"{root_dir}/**/*.org", recursive=True))
 
 
+def format_tz(tz):
+    """
+    Format the time zone string.
+    """
+    if tz[4] == "0":
+        tz = tz[:4] + tz[5:]
+    return tz[:-2]
+
+
 def get_flight(date, start_airport, start_time, end_airport, end_time):
     """
     Parse the flight information from a single flight.
     """
+    with open(TZ_FILE, "r", encoding="utf8") as file:
+        tz_dict = json.load(file)
+
+    start_dt = dt.datetime.strptime(
+        f"{date} {start_time} {tz_dict[start_airport]}", "%b %d, %Y %I:%M %p %Z%z"
+    )
+    end_dt = dt.datetime.strptime(
+        f"{date} {end_time} {tz_dict[end_airport]}", "%b %d, %Y %I:%M %p %Z%z"
+    )
+    next_day = False
+    if end_dt < start_dt:
+        end_dt += dt.timedelta(days=1)
+        next_day = True
+    total_minutes = (end_dt - start_dt).seconds // 60
+    hours = total_minutes // 60
+    minutes = total_minutes % 60
+
     return {
         "start_date": date,
         "start_airport": start_airport,
         "start_time": start_time,
+        "start_tz": format_tz(tz_dict[start_airport]),
         "end_airport": end_airport,
         "end_time": end_time,
+        "end_tz": format_tz(tz_dict[end_airport]),
+        "flight_duration": f"{hours}h {minutes}m",
+        "next_day": next_day,
     }
 
 
